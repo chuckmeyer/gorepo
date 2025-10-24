@@ -56,10 +56,11 @@ source ~/.zshrc
 
 ## Configuration
 
-By default, `gorepo` looks for repositories in `~/Documents/GitHub`. To change this, edit the `github_dir` variable in the script:
+By default, `gorepo` looks for repositories in `~/Documents/GitHub`. To change this, edit the `GOREPO_DIR` variable at the top of the script:
 
 ```bash
-local github_dir="$HOME/Documents/GitHub"  # Change this path
+# Edit this line in the gorepo script
+typeset -g GOREPO_DIR="$HOME/Documents/GitHub"  # Change this to your repo directory
 ```
 
 ## Usage

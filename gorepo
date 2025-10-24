@@ -6,14 +6,18 @@
 #   - Without pattern: opens fzf with all repos
 #   - Press Tab while typing to trigger interactive selection
 
+# ============================================================================
+# Configuration - Edit this path to match your GitHub directory location
+# ============================================================================
+typeset -g GOREPO_DIR="$HOME/Documents/GitHub"
+
 # Helper function: Get list of all repositories
 _gorepo_get_repos() {
-    local github_dir="$HOME/Documents/GitHub"
     local -a repos=("root")
 
-    [[ -d "$github_dir" ]] || return 1
+    [[ -d "$GOREPO_DIR" ]] || return 1
 
-    for dir in "$github_dir"/*(/N); do
+    for dir in "$GOREPO_DIR"/*(/N); do
         repos+=("${dir:t}")
     done
 
@@ -24,23 +28,21 @@ _gorepo_get_repos() {
 # Helper function: Navigate to a repository
 _gorepo_navigate() {
     local repo="$1"
-    local github_dir="$HOME/Documents/GitHub"
 
     if [[ "$repo" == "root" ]]; then
-        cd "$github_dir" && echo "→ $github_dir"
+        cd "$GOREPO_DIR" && echo "→ $GOREPO_DIR"
     else
-        cd "$github_dir/$repo" && echo "→ $github_dir/$repo"
+        cd "$GOREPO_DIR/$repo" && echo "→ $GOREPO_DIR/$repo"
     fi
 }
 
 # Main gorepo function
 gorepo() {
-    local github_dir="$HOME/Documents/GitHub"
     local pattern="$1"
 
     # Check if GitHub directory exists
-    if [[ ! -d "$github_dir" ]]; then
-        echo "Error: GitHub directory not found at $github_dir"
+    if [[ ! -d "$GOREPO_DIR" ]]; then
+        echo "Error: GitHub directory not found at $GOREPO_DIR"
         return 1
     fi
 
@@ -50,7 +52,7 @@ gorepo() {
 
     # If no repos found (only "root" exists)
     if [[ ${#repos[@]} -eq 1 ]]; then
-        echo "No repositories found in $github_dir"
+        echo "No repositories found in $GOREPO_DIR"
         return 1
     fi
 
@@ -75,7 +77,6 @@ gorepo() {
 
 # Custom widget for tab completion using fzf
 _gorepo_fzf_completion() {
-    local github_dir="$HOME/Documents/GitHub"
     local tokens=(${(z)LBUFFER})
 
     # Check if this is a gorepo command
