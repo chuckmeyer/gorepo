@@ -2,93 +2,137 @@
 
 # gorepo - quickly navigate to GitHub repositories with fuzzy matching
 # Usage: gorepo [pattern]
-#   - With pattern: searches for matching repos using fuzzy search
-#   - Without pattern: lists all repos
+#   - With pattern: opens fzf with pre-filtered results if no exact match
+#   - Without pattern: opens fzf with all repos
+#   - Press Tab while typing to trigger interactive selection
 
-local github_dir="$HOME/Documents/GitHub"
-local pattern="$1"
+# Helper function: Get list of all repositories
+_gorepo_get_repos() {
+    local github_dir="$HOME/Documents/GitHub"
+    local -a repos=("root")
 
-# Check if GitHub directory exists
-if [[ ! -d "$github_dir" ]]; then
-    echo "Error: GitHub directory not found at $github_dir"
-    return 1
-fi
+    [[ -d "$github_dir" ]] || return 1
 
-# If no pattern provided, list all repos
-if [[ -z "$pattern" ]]; then
-    echo "Available repositories in $github_dir:"
-    ls -1 "$github_dir"
-    return 0
-fi
-
-# Convert pattern to lowercase for case-insensitive matching
-local pattern_lower="${pattern:l}"
-
-# Special case: "root" goes to the GitHub directory itself
-if [[ "$pattern_lower" == "root" ]]; then
-    cd "$github_dir"
-    echo "→ $github_dir"
-    return 0
-fi
-
-# Find matching directories using fuzzy matching
-# This supports partial matches anywhere in the name
-local matches=()
-for dir in "$github_dir"/*(/N); do
-    local dirname="${dir:t}"
-    local dirname_lower="${dirname:l}"
-
-    # Check if all characters in pattern appear in order in dirname
-    local remaining="$dirname_lower"
-    local matched=true
-    for (( i=1; i<=${#pattern_lower}; i++ )); do
-        local char="${pattern_lower[$i]}"
-        if [[ "$remaining" == *"$char"* ]]; then
-            # Remove everything up to and including the matched character
-            remaining="${remaining#*$char}"
-        else
-            matched=false
-            break
-        fi
+    for dir in "$github_dir"/*(/N); do
+        repos+=("${dir:t}")
     done
 
-    if $matched; then
-        matches+=("$dirname")
+    # Return repos via stdout
+    printf '%s\n' "${repos[@]}"
+}
+
+# Helper function: Navigate to a repository
+_gorepo_navigate() {
+    local repo="$1"
+    local github_dir="$HOME/Documents/GitHub"
+
+    if [[ "$repo" == "root" ]]; then
+        cd "$github_dir" && echo "→ $github_dir"
+    else
+        cd "$github_dir/$repo" && echo "→ $github_dir/$repo"
     fi
-done
+}
 
-# Handle results
-case ${#matches[@]} in
-    0)
-        echo "No repositories found matching: $pattern"
-        echo "\nAvailable repositories:"
-        ls -1 "$github_dir" | head -10
+# Main gorepo function
+gorepo() {
+    local github_dir="$HOME/Documents/GitHub"
+    local pattern="$1"
+
+    # Check if GitHub directory exists
+    if [[ ! -d "$github_dir" ]]; then
+        echo "Error: GitHub directory not found at $github_dir"
         return 1
-        ;;
-    1)
-        cd "$github_dir/${matches[1]}"
-        echo "→ $github_dir/${matches[1]}"
-        ;;
-    *)
-        echo "Multiple matches found:"
-        local i=1
-        for match in "${matches[@]}"; do
-            echo "  $i) $match"
-            ((i++))
-        done
-        echo ""
-        echo -n "Select a number (or press Enter to cancel): "
-        read selection
+    fi
 
-        if [[ "$selection" =~ ^[0-9]+$ ]] && (( selection >= 1 && selection <= ${#matches[@]} )); then
-            cd "$github_dir/${matches[$selection]}"
-            echo "→ $github_dir/${matches[$selection]}"
-        elif [[ -n "$selection" ]]; then
-            echo "Invalid selection"
-            return 1
-        else
-            echo "Cancelled"
-            return 0
-        fi
-        ;;
-esac
+    # Get all repositories as an array
+    local -a repos
+    repos=(${(f)"$(_gorepo_get_repos)"})
+
+    # If no repos found (only "root" exists)
+    if [[ ${#repos[@]} -eq 1 ]]; then
+        echo "No repositories found in $github_dir"
+        return 1
+    fi
+
+    # If pattern provided, check for exact match first
+    if [[ -n "$pattern" ]] && (( ${repos[(Ie)$pattern]} )); then
+        _gorepo_navigate "$pattern"
+        return $?
+    fi
+
+    # No exact match or no pattern, use fzf for interactive selection
+    local selected
+    selected=$(printf '%s\n' "${repos[@]}" | fzf \
+        ${pattern:+--query="$pattern"} \
+        --height=40% \
+        --reverse \
+        --border \
+        --prompt="Select repo > ")
+
+    # Navigate to selected repository if one was chosen
+    [[ -n "$selected" ]] && _gorepo_navigate "$selected"
+}
+
+# Custom widget for tab completion using fzf
+_gorepo_fzf_completion() {
+    local github_dir="$HOME/Documents/GitHub"
+    local tokens=(${(z)LBUFFER})
+
+    # Check if this is a gorepo command
+    if [[ ${#tokens[@]} -eq 0 ]] || [[ ${tokens[1]} != "gorepo" ]]; then
+        zle expand-or-complete
+        return
+    fi
+
+    # Extract pattern if provided
+    local pattern="${tokens[2]:-}"
+
+    # Get all repositories as an array
+    local -a repos
+    repos=(${(f)"$(_gorepo_get_repos)"})
+
+    # Check for exact match if pattern is provided
+    if [[ -n "$pattern" ]] && (( ${repos[(Ie)$pattern]} )); then
+        BUFFER="gorepo $pattern"
+        zle accept-line
+        return
+    fi
+
+    # No exact match, run fzf for selection
+    local selected
+    selected=$(printf '%s\n' "${repos[@]}" | fzf \
+        ${pattern:+--query="$pattern"} \
+        --height=40% \
+        --reverse \
+        --border \
+        --prompt="Select repo > " \
+        </dev/tty)
+
+    # If something was selected, update command line and execute
+    if [[ -n "$selected" ]]; then
+        BUFFER="gorepo $selected"
+        zle accept-line
+    else
+        zle redisplay
+    fi
+}
+
+# Create and register the widget
+zle -N _gorepo_fzf_completion
+
+# Save the original tab widget
+typeset -g _gorepo_original_tab_widget="${$(bindkey '^I')##* }"
+
+# Create a wrapper that decides whether to use fzf or default completion
+_gorepo_tab_wrapper() {
+    local tokens=(${(z)LBUFFER})
+    if [[ ${#tokens[@]} -gt 0 ]] && [[ ${tokens[1]} == "gorepo" ]]; then
+        _gorepo_fzf_completion
+    else
+        zle ${_gorepo_original_tab_widget}
+    fi
+}
+
+# Create and bind the wrapper widget to Tab
+zle -N _gorepo_tab_wrapper
+bindkey '^I' _gorepo_tab_wrapper
