@@ -1,0 +1,94 @@
+#!/usr/bin/env zsh
+
+# gorepo - quickly navigate to GitHub repositories with fuzzy matching
+# Usage: gorepo [pattern]
+#   - With pattern: searches for matching repos using fuzzy search
+#   - Without pattern: lists all repos
+
+local github_dir="$HOME/Documents/GitHub"
+local pattern="$1"
+
+# Check if GitHub directory exists
+if [[ ! -d "$github_dir" ]]; then
+    echo "Error: GitHub directory not found at $github_dir"
+    return 1
+fi
+
+# If no pattern provided, list all repos
+if [[ -z "$pattern" ]]; then
+    echo "Available repositories in $github_dir:"
+    ls -1 "$github_dir"
+    return 0
+fi
+
+# Convert pattern to lowercase for case-insensitive matching
+local pattern_lower="${pattern:l}"
+
+# Special case: "root" goes to the GitHub directory itself
+if [[ "$pattern_lower" == "root" ]]; then
+    cd "$github_dir"
+    echo "→ $github_dir"
+    return 0
+fi
+
+# Find matching directories using fuzzy matching
+# This supports partial matches anywhere in the name
+local matches=()
+for dir in "$github_dir"/*(/N); do
+    local dirname="${dir:t}"
+    local dirname_lower="${dirname:l}"
+
+    # Check if all characters in pattern appear in order in dirname
+    local remaining="$dirname_lower"
+    local matched=true
+    for (( i=1; i<=${#pattern_lower}; i++ )); do
+        local char="${pattern_lower[$i]}"
+        if [[ "$remaining" == *"$char"* ]]; then
+            # Remove everything up to and including the matched character
+            remaining="${remaining#*$char}"
+        else
+            matched=false
+            break
+        fi
+    done
+
+    if $matched; then
+        matches+=("$dirname")
+    fi
+done
+
+# Handle results
+case ${#matches[@]} in
+    0)
+        echo "No repositories found matching: $pattern"
+        echo "\nAvailable repositories:"
+        ls -1 "$github_dir" | head -10
+        return 1
+        ;;
+    1)
+        cd "$github_dir/${matches[1]}"
+        echo "→ $github_dir/${matches[1]}"
+        ;;
+    *)
+        echo "Multiple matches found:"
+        local i=1
+        for match in "${matches[@]}"; do
+            echo "  $i) $match"
+            ((i++))
+        done
+        echo ""
+        echo -n "Select a number (or press Enter to cancel): "
+        read selection
+
+        if [[ "$selection" =~ ^[0-9]+$ ]] && (( selection >= 1 && selection <= ${#matches[@]} )); then
+            cd "$github_dir/${matches[$selection]}"
+            echo "→ $github_dir/${matches[$selection]}"
+        elif [[ -n "$selection" ]]; then
+            echo "Invalid selection"
+            return 1
+        else
+            echo "Cancelled"
+            return 0
+        fi
+        ;;
+esac
