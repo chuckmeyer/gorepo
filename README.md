@@ -8,15 +8,22 @@ Quickly navigate to GitHub repositories with fuzzy matching and fzf-powered tab 
 - **Tab completion** - Press Tab to trigger interactive selection
 - **Exact match detection** - Instantly navigate when repo name matches exactly
 - **Pattern filtering** - Pre-filter results by typing partial repo names
+- **Fast caching** - Repository list cached for instant performance
+- **Oh My Zsh plugin** - Seamless integration with Oh My Zsh
 
 ## Requirements
 
 - [zsh](https://www.zsh.org/) - Z shell
+- [Oh My Zsh](https://ohmyz.sh/) - Zsh framework
 - [fzf](https://github.com/junegunn/fzf) - Fuzzy finder (required for interactive selection)
 
-### Installing fzf
+### Installing prerequisites
 
 ```bash
+# Install Oh My Zsh (if not already installed)
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+
+# Install fzf
 # macOS
 brew install fzf
 
@@ -26,6 +33,27 @@ git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
 ```
 
 ## Installation
+
+### Oh My Zsh Plugin (Recommended)
+
+1. Clone this repository into your Oh My Zsh custom plugins directory:
+```bash
+git clone https://github.com/chuckmeyer/gorepo.git ~/.oh-my-zsh/custom/plugins/gorepo
+```
+
+2. Add `gorepo` to your plugins in `~/.zshrc`:
+```bash
+plugins=(git fzf gorepo)
+```
+
+3. Reload your shell:
+```bash
+source ~/.zshrc
+```
+
+### Standalone Installation (Alternative)
+
+If you're not using Oh My Zsh:
 
 1. Clone this repository:
 ```bash
@@ -56,11 +84,20 @@ source ~/.zshrc
 
 ## Configuration
 
-By default, `gorepo` looks for repositories in `~/Documents/GitHub`. To change this, edit the `GOREPO_DIR` variable at the top of the script:
+By default, `gorepo` looks for repositories in `~/Documents/GitHub`. To change this:
+
+**For Oh My Zsh plugin users:**
+Edit the `GOREPO_DIR` variable in `~/.oh-my-zsh/custom/plugins/gorepo/gorepo.plugin.zsh`:
 
 ```bash
-# Edit this line in the gorepo script
-typeset -g GOREPO_DIR="$HOME/Documents/GitHub"  # Change this to your repo directory
+typeset -g GOREPO_DIR="$HOME/your/custom/path"
+```
+
+**For standalone installation:**
+Edit the `GOREPO_DIR` variable in the `gorepo` script:
+
+```bash
+typeset -g GOREPO_DIR="$HOME/your/custom/path"
 ```
 
 ## Usage

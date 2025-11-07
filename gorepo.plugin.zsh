@@ -1,10 +1,5 @@
-#!/usr/bin/env zsh
-
 # gorepo - quickly navigate to GitHub repositories with fuzzy matching
-# Usage: gorepo [pattern]
-#   - With pattern: opens fzf with pre-filtered results if no exact match
-#   - Without pattern: opens fzf with all repos
-#   - Press Tab while typing to trigger interactive selection
+# Oh My Zsh plugin
 
 # ============================================================================
 # Configuration - Edit this path to match your GitHub directory location
@@ -102,9 +97,9 @@ _gorepo_fzf_completion() {
         return
     fi
 
-    # Temporarily unbind our tab wrapper to prevent interference with fzf
-    bindkey -r '^I'
-    bindkey '^I' ${_gorepo_original_tab_widget}
+    # Signal ZLE that we're about to perform external I/O
+    # This is critical - it tells ZLE to clean up and let fzf have full control
+    zle -I
 
     # No exact match, run fzf for selection
     local selected
@@ -113,26 +108,27 @@ _gorepo_fzf_completion() {
         --height=40% \
         --reverse \
         --border \
-        --prompt="Select repo > " \
-        < /dev/tty)
+        --prompt="Select repo > ")
 
-    # Re-bind our tab wrapper
-    bindkey '^I' _gorepo_tab_wrapper
+    local ret=$?
+
+    # Refresh the line editor
+    zle reset-prompt
 
     # If something was selected, update command line and execute
-    if [[ -n "$selected" ]]; then
+    if [[ $ret -eq 0 && -n "$selected" ]]; then
         BUFFER="gorepo $selected"
         zle accept-line
-    else
-        zle redisplay
     fi
 }
 
 # Create and register the widget
 zle -N _gorepo_fzf_completion
 
-# Save the original tab widget
-typeset -g _gorepo_original_tab_widget="${$(bindkey '^I')##* }"
+# Save what the current Tab widget is (set by fzf or other plugins)
+_gorepo_save_original_tab_widget() {
+    typeset -g _gorepo_original_tab_widget="${$(bindkey '^I')##* }"
+}
 
 # Create a wrapper that decides whether to use fzf or default completion
 _gorepo_tab_wrapper() {
@@ -140,10 +136,29 @@ _gorepo_tab_wrapper() {
     if [[ ${#tokens[@]} -gt 0 ]] && [[ ${tokens[1]} == "gorepo" ]]; then
         _gorepo_fzf_completion
     else
-        zle ${_gorepo_original_tab_widget}
+        # Call the original widget that was bound before we took over
+        zle ${_gorepo_original_tab_widget:-expand-or-complete}
     fi
 }
 
-# Create and bind the wrapper widget to Tab
+# Create the wrapper widget
 zle -N _gorepo_tab_wrapper
-bindkey '^I' _gorepo_tab_wrapper
+
+# Hook to run after all plugins are loaded (after .zshrc sources oh-my-zsh.sh)
+_gorepo_late_init() {
+    # Save the current tab widget (likely set by fzf plugin)
+    _gorepo_save_original_tab_widget
+    # Now bind our wrapper
+    bindkey '^I' _gorepo_tab_wrapper
+}
+
+# Use precmd hook to do this after shell is fully initialized
+autoload -Uz add-zsh-hook
+add-zsh-hook precmd _gorepo_late_init
+
+# Remove the hook after first run so it doesn't run on every prompt
+_gorepo_cleanup_hook() {
+    add-zsh-hook -d precmd _gorepo_late_init
+    add-zsh-hook -d precmd _gorepo_cleanup_hook
+}
+add-zsh-hook precmd _gorepo_cleanup_hook
